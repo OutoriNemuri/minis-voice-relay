@@ -1,0 +1,8 @@
+# 忽略本机敏感与临时文件
+key
+*.key
+config.json
+*.log
+__pycache__/
+*.pyc
+.DS_Store
