@@ -48,6 +48,10 @@ sh bin/preflight.sh
 
 sh bin/autostart.sh doctor
 # expect: health: ok
+
+sh bin/doctor.sh
+# Independent self-test (deps / key / TTS / ASR / design constraints).
+# Exit code 0 = all green; tells you exactly which stage failed, no AI involved.
 ```
 
 Troubleshooting:

@@ -42,6 +42,7 @@ cd minis-voice-relay
 sh bin/autostart.sh save-key sk-xxxxxxxx   # 写入 ~/.config/minis-voice-relay/key（600）
 sh bin/preflight.sh                        # relay: started / already running
 sh bin/autostart.sh doctor                 # 期望 health: ok
+sh bin/doctor.sh                           # 独立自检：依赖/密钥/TTS/ASR/设计约束，不依赖 AI
 ```
 
 **让 AI 助手装**：把仓库丢给它，让它读 [`AGENTS.md`](AGENTS.md)（英文版 [`AGENTS.en.md`](AGENTS.en.md)），

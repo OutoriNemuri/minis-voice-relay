@@ -49,6 +49,10 @@ sh bin/preflight.sh
 
 sh bin/autostart.sh doctor
 # 期望：health: ok
+
+sh bin/doctor.sh
+# 独立自检（依赖 / 密钥 / TTS / ASR / 设计约束）。退出码 0 = 全绿；
+# 它不依赖 AI，服务挂了会明确告诉你挂在哪一环。
 ```
 
 失败的排查顺序：

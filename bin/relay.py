@@ -302,14 +302,21 @@ def sse(text: str, model: str = "deepseek-asr-relay") -> bytes:
 
 
 # ---------------------------------------------------------------- HTTP
-def log(msg: str):
-    line = f"[{time.strftime('%H:%M:%S')}] {msg}"
-    print(line, file=sys.stderr, flush=True)
+def _write_log(line: str):
+    """唯一的落盘入口。
+
+    以前 print 到 stderr（已被启动脚本重定向进同一个文件）再额外写一遍文件，
+    结果每行都出现两次。现在只写文件；stderr 只留真正的异常回溯。
+    """
     try:
         with open(LOG_PATH, "a", encoding="utf-8") as f:
             f.write(line + "\n")
     except OSError:
-        pass
+        print(line, file=sys.stderr, flush=True)
+
+
+def log(msg: str):
+    _write_log(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
 
 def dump(payload, tag="request"):
@@ -330,7 +337,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *a):
         if self.verbose:
-            print(f"<- {self.command} {self.path}  {fmt % a}", flush=True)
+            log(f"<- {self.command} {self.path}  {fmt % a}")
 
     def _multipart_audio(self, raw: bytes):
         """解析 multipart，返回第一段带 filename 的音频字节。
@@ -360,16 +367,16 @@ class Handler(BaseHTTPRequestHandler):
         audio = self._multipart_audio(raw)
         if audio is None:
             fmt = "multipart 里没有 file 字段"
-            print(f"!!! {fmt}", flush=True)
+            log(f"!!! {fmt}")
             return self._json(400, {"error": {"message": f"relay: {fmt}"}})
-        print(f"转录请求 {len(audio)} 字节音频 → ASR", flush=True)
+        log(f"转录请求 {len(audio)} 字节音频 → ASR")
         try:
             wav = normalize_audio(audio, None)
             result = deepseek_asr(wav)
             text = (result.get("text") or "").strip()
-            print(f"转写完成 {result.get('duration_ms')}ms：{text[:60]}", flush=True)
+            log(f"转写完成 {result.get('duration_ms')}ms：{text[:60]}")
         except Exception as e:
-            print(f"ASR 失败：{e}", flush=True)
+            log(f"ASR 失败：{e}")
             return self._json(502, {"error": {"message": f"relay: {e}"}})
         return self._json(200, {"text": text})
 
@@ -382,7 +389,7 @@ class Handler(BaseHTTPRequestHandler):
         """未知路径也答一份，方便反查 Minis 实际请求的 URL。"""
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b""
-        print(f"!!! 未知路径 {self.command} {self.path} ({len(raw)} bytes)", flush=True)
+        log(f"!!! 未知路径 {self.command} {self.path} ({len(raw)} bytes)")
         with open("/tmp/mvrelay_route.txt", "a", encoding="utf-8") as f:
             f.write(f"{time.strftime('%H:%M:%S')} {self.command} {self.path} {len(raw)}\n")
             for k, v in self.headers.items():
@@ -435,13 +442,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": {"message": "input 为空"}})
         voice = pick_voice(payload)
         fmt = payload.get("response_format") or payload.get("format") or "wav"
-        print(f"合成请求 {len(text)} 字 voice={voice} format={fmt}", flush=True)
+        log(f"合成请求 {len(text)} 字 voice={voice} format={fmt}")
         try:
             audio, actual = deepseek_tts(text, voice, fmt)
         except Exception as e:
-            print(f"TTS 失败：{e}", flush=True)
+            log(f"TTS 失败：{e}")
             return self._json(502, {"error": {"message": f"relay: {e}"}})
-        print(f"合成完成 {len(audio)} 字节（{actual}）", flush=True)
+        log(f"合成完成 {len(audio)} 字节（{actual}）")
         self.send_response(200)
         self.send_header("Content-Type", MIME.get(actual, "application/octet-stream"))
         self.send_header("Content-Length", str(len(audio)))
@@ -470,7 +477,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw.decode("utf-8", "replace") or "{}")
         except json.JSONDecodeError:
             return self._json(400, {"error": {"message": "body 不是 JSON"}})
-        print(f"POST {self.path}  ({len(raw)} bytes, model={payload.get('model')!r})", flush=True)
+        log(f"POST {self.path}  ({len(raw)} bytes, model={payload.get('model')!r})")
         dump(payload)
         audio, fmt = find_audio(payload)
         if audio is None:
@@ -513,7 +520,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int, host: str = "127.0.0.1"):
-    srv = ThreadingHTTPServer((host, port), Handler)
+    try:
+        srv = ThreadingHTTPServer((host, port), Handler)
+    except OSError as e:
+        # 端口被占：多半是上次的进程还活着，或者另一个实例在跑。别静默失败。
+        log(f"启动失败：端口 {port} 无法绑定（{e}）。"
+            f"已被占用的话直接访问 /health 确认，或停掉旧进程。")
+        sys.exit(2)
     log(f"voice relay 监听 http://{host}:{port}（文本模型 {VOICE_MODEL}，默认音色 {pick_voice({})}，日志 {LOG_PATH}）")
     try:
         srv.serve_forever()

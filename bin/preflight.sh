@@ -20,10 +20,20 @@ fi
 if [ -z "$DEEPSEEK_API_KEY" ]; then
   if [ -r "$KEYFILE" ]; then
     DEEPSEEK_API_KEY=$(cat "$KEYFILE"); export DEEPSEEK_API_KEY
+
+# 文件从网盘/压缩包拷过来常常丢执行位，这里顺手兜一下，避免「服务起不来还不知道为什么」
+for f in "$HERE"/*.sh "$HERE"/relay.py; do
+  [ -f "$f" ] && [ ! -x "$f" ] && chmod +x "$f" 2>/dev/null
+done
     echo "relay: key 来自 $KEYFILE"
   fi
 fi
 export DEEPSEEK_API_KEY
+
+# 文件从网盘/压缩包拷过来常常丢执行位，这里顺手兜一下，避免「服务起不来还不知道为什么」
+for f in "$HERE"/*.sh "$HERE"/relay.py; do
+  [ -f "$f" ] && [ ! -x "$f" ] && chmod +x "$f" 2>/dev/null
+done
 
 if [ -z "$DEEPSEEK_API_KEY" ]; then
   echo "relay: 缺少 DEEPSEEK_API_KEY —— 先跑 sh bin/autostart.sh save-key <sk-...>" >&2
