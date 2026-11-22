@@ -158,6 +158,32 @@ CFG_DIR = os.path.expanduser("~/.config/minis-voice-relay")
 CFG_PATH = os.path.join(CFG_DIR, "config.json")
 DEFAULT_VOICE = "stella"
 
+# /v1/models 里对外声明的模型。模态字段多写几种常见拼法，客户端认哪个都能取到，
+# 这样 Minis 拉一次列表就能同时发现 ASR 与 TTS，不用手工添加。
+MODELS = (
+    ("deepseek-asr-relay", "语音转写（DeepSeek ASR）", "audio_input"),
+    ("deepseek-tts-relay", "语音合成（DeepSeek TTS）", "audio_output"),
+)
+
+
+def model_list() -> list:
+    now = int(time.time())
+    out = []
+    for model_id, label, modality in MODELS:
+        out.append({
+            "id": model_id,
+            "object": "model",
+            "created": now,
+            "owned_by": "relay",
+            "name": label,
+            "modality": modality,
+            "modalities": [modality],
+            "capabilities": [modality],
+            "output_modalities": [modality] if modality == "audio_output" else ["text"],
+            "input_modalities": ["audio", "text"] if modality == "audio_input" else ["text"],
+        })
+    return out
+
 
 def load_config() -> dict:
     """读 ~/.config/minis-voice-relay/config.json；坏了就当空的，不阻断服务。"""
@@ -423,9 +449,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/v1/models") or self.path.startswith("/models"):
-            return self._json(200, {"object": "list", "data": [
-                {"id": "deepseek-asr-relay", "object": "model", "owned_by": "relay",
-                 "created": int(time.time())}]})
+            return self._json(200, {"object": "list", "data": model_list()})
         if self.path.startswith("/health"):
             return self._json(200, {"ok": True})
         return self._catch_all()
